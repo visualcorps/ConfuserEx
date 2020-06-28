@@ -264,14 +264,10 @@ namespace Confuser.Core {
 		static void Inspection(ConfuserContext context) {
 			context.Logger.Info("Resolving dependencies...");
 			foreach (var dependency in context.Modules
-											  .SelectMany(module => module.GetAssemblyRefs().Select(asmRef => Tuple.Create(asmRef, module)))) {
-				try {
-					AssemblyDef assembly = context.Resolver.ResolveThrow(dependency.Item1, dependency.Item2);
-				}
-				catch (AssemblyResolveException ex) {
-					context.Logger.ErrorException("Failed to resolve dependency of '" + dependency.Item2.Name + "'.", ex);
-					throw new ConfuserException(ex);
-				}
+											  .SelectMany(module => module.GetAssemblyRefs().Select(asmRef => (asmRef, module)))) {
+				var assembly = context.Resolver.Resolve(dependency.asmRef, dependency.module);
+				if (assembly is null)
+					context.Logger.Warn("Failed to resolve dependency '" + dependency.asmRef.FullName + "'.");
 			}
 
 			context.Logger.Debug("Checking Strong Name...");
@@ -313,7 +309,7 @@ namespace Confuser.Core {
 			else if (isKeyProvided && !moduleIsSignedOrDelayedSigned)
 				context.Logger.WarnFormat("[{0}] SN Key or SN public Key is provided for an unsigned module, the output may not be working.", module.Name);
 			else if (snPubKeyBytes != null && moduleIsSignedOrDelayedSigned &&
-			         !module.Assembly.PublicKey.Data.SequenceEqual(snPubKeyBytes))
+					 !module.Assembly.PublicKey.Data.SequenceEqual(snPubKeyBytes))
 				context.Logger.WarnFormat("[{0}] Provided SN public Key and signed module's public key do not match, the output may not be working.",
 					module.Name);
 		}
@@ -530,7 +526,7 @@ namespace Confuser.Core {
 
 			if (context.Resolver != null) {
 				context.Logger.Error("Cached assemblies:");
-				foreach (AssemblyDef asm in context.Resolver.GetCachedAssemblies()) {
+				foreach (var asm in context.Resolver.GetCachedAssemblies().Where(a => !(a is null))) {
 					if (string.IsNullOrEmpty(asm.ManifestModule.Location))
 						context.Logger.ErrorFormat("    {0}", asm.FullName);
 					else
